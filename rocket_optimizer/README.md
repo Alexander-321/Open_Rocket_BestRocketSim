@@ -35,7 +35,7 @@ rocket_optimizer/
 4.  **Clone Repository:**
     ```bash
     git clone https://github.com/your-repo/rocket_optimizer.git
-    cd rocket_optimizer
+    cd Open_Rocket_BestRocketSim
     ```
 5.  **Configuration:**
     *   Edit `rocket_optimizer/config.py` to specify the path to your OpenRocket executable.
@@ -46,7 +46,7 @@ rocket_optimizer/
 To run the optimization:
 
 ```bash
-python main.py
+python3 -m rocket_optimizer.main
 ```
 
 The program will output results and visualizations to the `rocket_optimizer/results` directory.

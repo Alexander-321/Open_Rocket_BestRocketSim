@@ -1,5 +1,6 @@
 import csv
 import os
+import shutil
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -264,6 +265,18 @@ class TestRocketOptimizer(unittest.TestCase):
         self.assertGreater(fitness[0], 0)
         self.assertEqual(rocket.max_altitude, 75.0)
         self.assertTrue(rocket.simulation_successful)
+
+    def test_log_rocket_to_csv_recreates_missing_results_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results_dir = os.path.join(temp_dir, "missing_results_dir")
+            optimizer = RocketOptimizer(results_dir=results_dir)
+            shutil.rmtree(results_dir)
+
+            rocket = optimizer._attr_rocket()
+            optimizer._log_rocket_to_csv(0, 0, rocket, 1.23)
+
+            self.assertTrue(os.path.isdir(results_dir))
+            self.assertTrue(os.path.exists(optimizer.results_csv))
 
 
 

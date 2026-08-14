@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-RESULTS_DIR = os.path.join(BASE_DIR, "results")
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PACKAGE_DIR.parent
+TEMPLATES_DIR = str(PACKAGE_DIR / "templates")
+RESULTS_DIR = str(PACKAGE_DIR / "results")
 
 # OpenRocket Configuration
 OPENROCKET_JAR_PATH = "/Applications/OpenRocket.app/Contents/Resources/app/jar/OpenRocket-24.12.jar"
@@ -85,5 +87,4 @@ def create_run_directory(preset_name=None, target_altitude=None, run_name=None):
     run_dir = os.path.join(RESULTS_DIR, folder_name)
     os.makedirs(run_dir, exist_ok=True)
     return run_dir
-
 
