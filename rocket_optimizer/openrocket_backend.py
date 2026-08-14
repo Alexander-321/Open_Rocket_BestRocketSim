@@ -263,6 +263,7 @@ class OpenRocketBackend:
 
             self._call_method(parachute, "setPackedLength", packed_length)
             self._call_method(parachute, "setPackedRadius", packed_radius)
+            self._set_axial_method_top(parachute)
             self._call_method(parachute, "setAxialOffset", cursor)
 
             front = cursor
@@ -378,6 +379,30 @@ class OpenRocketBackend:
             return method(*args)
         except Exception:
             return None
+
+    def _set_axial_method_top(self, component) -> None:
+        method_names = ["setAxialMethod", "setRelativePositionMethod"]
+        enum_candidates = []
+        if self._instance is not None:
+            try:
+                enum_candidates.append(self._instance.openrocket.rocketcomponent.position.AxialMethod.TOP)
+            except Exception:
+                pass
+            try:
+                enum_candidates.append(self._instance.openrocket.rocketcomponent.AxialMethod.TOP)
+            except Exception:
+                pass
+
+        for method_name in method_names:
+            setter = getattr(component, method_name, None)
+            if setter is None:
+                continue
+            for enum_value in enum_candidates:
+                try:
+                    setter(enum_value)
+                    return
+                except Exception:
+                    continue
 
     def _safe_float(self, value: Any, default: float) -> float:
         try:
