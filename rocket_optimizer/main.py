@@ -6,7 +6,7 @@ from .optimizer import RocketOptimizer
 from .visualization import RocketVisualizer
 from .config import (
     OPENROCKET_JAR_PATH, TEMPLATES_DIR, RESULTS_DIR, POPULATION_SIZE, NUM_GENERATIONS,
-    COMPETITION_PRESETS, TARGET_ALTITUDE
+    COMPETITION_PRESETS, TARGET_ALTITUDE, PROJECT_ROOT, PACKAGE_DIR
 )
 from .utils import logger
 
@@ -105,6 +105,8 @@ def main():
         target_altitude = COMPETITION_PRESETS[preset_key]["target_altitude"]
 
     logger.info("Starting Rocket Optimization Application")
+    logger.info(f"Loaded rocket_optimizer module from: {PACKAGE_DIR}")
+    logger.info(f"Project root resolved to: {PROJECT_ROOT}")
     if preset_key:
         logger.info(f"Using Preset: {preset_key} - {COMPETITION_PRESETS[preset_key]['description']}")
     if target_altitude is not None:
@@ -176,4 +178,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

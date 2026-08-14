@@ -9,12 +9,15 @@ optimize high-performance rocket models in OpenRocket (.ork format).
 1. QUICK START - HOW TO RUN
 --------------------------------------------------------------------------------
 
-Make sure you are in the project folder (or add it to your PYTHONPATH):
-   cd /Users/ard/Desktop/untitled_folder/Rocket_SIM
+Make sure you are in the active project folder copy (or add it to your PYTHONPATH):
+   cd /path/to/Open_Rocket_BestRocketSim
 
 A. INTERACTIVE MENU (RECOMMENDED FOR BEGINNERS)
    Run the interactive setup menu to easily pick presets and parameters:
       python3 -m rocket_optimizer.main --interactive
+
+   Startup logs print "Loaded rocket_optimizer module from ..." so you can confirm
+   you are running the expected project copy.
 
 B. SPACE KOSHIEN 2026 PRESETS
    - C-Motor Target (140 meters / 459 feet):

@@ -142,6 +142,7 @@ class RocketOptimizer:
         self._initialize_results_csv()
 
     def _initialize_results_csv(self) -> None:
+        os.makedirs(self.results_dir, exist_ok=True)
         if not os.path.exists(self.results_csv):
             with open(self.results_csv, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -160,6 +161,7 @@ class RocketOptimizer:
         rocket: Rocket,
         fitness: Optional[float] = None,
     ) -> None:
+        os.makedirs(self.results_dir, exist_ok=True)
         with open(self.results_csv, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -473,4 +475,3 @@ Evolution Plots:      fitness_evolution.png, altitude_distribution.png, etc.
             logger.info(f"Run summary written to {self.summary_file}")
         except Exception as e:
             logger.error(f"Error writing run summary: {e}")
-
