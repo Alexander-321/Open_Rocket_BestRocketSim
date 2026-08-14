@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
-import orlab
+try:
+    import orlab
+except ModuleNotFoundError:  # pragma: no cover - only used in environments without OpenRocket bindings
+    orlab = None
 
 from .config import OPENROCKET_JAR_PATH, TEMPLATES_DIR
 from .utils import logger
@@ -30,6 +33,7 @@ class OpenRocketBackend:
         self._instance: Optional[orlab.OpenRocketInstance] = None
         self._helper: Optional[orlab.Helper] = None
         self._shape_enum = None
+        self.last_geometry_report: Optional[dict[str, Any]] = None
 
     def start(self) -> None:
         if self._instance is not None:
@@ -38,6 +42,8 @@ class OpenRocketBackend:
             raise FileNotFoundError(f"Template not found: {self.template_path}")
         if not os.path.exists(self.jar_path):
             raise FileNotFoundError(f"OpenRocket JAR not found: {self.jar_path}")
+        if orlab is None:
+            raise ModuleNotFoundError("orlab is required to run OpenRocket integration")
 
         self._instance = orlab.OpenRocketInstance(jar_path=self.jar_path)
         self._instance.__enter__()
@@ -174,6 +180,16 @@ class OpenRocketBackend:
             except Exception as e:
                 logger.debug(f"Note on secondary parachute addition: {e}")
 
+        if body_tubes:
+            all_parachutes = self.helper.get_components_of_type(rocket, "Parachute")
+            geometry = self._layout_and_validate_recovery_geometry(
+                body_tubes=body_tubes,
+                parachutes=all_parachutes,
+                design_parameters=design_parameters,
+            )
+            self.last_geometry_report = geometry
+            self._log_geometry_report(geometry)
+
         # Ensure Payload Mass Components (Quail Egg 10g + Altimeter 8g) exist in upper section
         try:
             mass_comps = self.helper.get_components_of_type(rocket, "MassComponent")
@@ -195,6 +211,200 @@ class OpenRocketBackend:
                 body_tubes[0].addChild(alt)
         except Exception as e:
             logger.debug(f"Note on payload mass component addition: {e}")
+
+    def _layout_and_validate_recovery_geometry(
+        self,
+        body_tubes,
+        parachutes,
+        design_parameters: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Place parachutes from actual geometry and validate containment/overlap constraints."""
+        if not body_tubes:
+            raise ValueError("Cannot place recovery system without body tube")
+
+        body_tube = body_tubes[0]
+        body_length = self._safe_float(self._call_method(body_tube, "getLength"), float(design_parameters.get("body_length", 0.3)))
+        body_outer_radius = self._body_outer_radius(body_tube, float(design_parameters.get("body_diameter", 0.03)) / 2.0)
+        body_thickness = self._safe_float(self._call_method(body_tube, "getThickness"), 0.001)
+        body_inner_radius = max(0.0, body_outer_radius - body_thickness)
+
+        engine_mount = self._first_child_of_type(body_tube, "InnerTube")
+        engine_front = None
+        engine_rear = None
+        if engine_mount is not None:
+            engine_front, engine_rear = self._component_bounds_in_parent(engine_mount, body_length)
+        else:
+            engine_front = body_length
+            engine_rear = body_length
+
+        recovery_start = 0.0
+        recovery_end = max(recovery_start, min(body_length, engine_front - 0.004))
+
+        if recovery_end <= recovery_start:
+            raise ValueError(
+                "Invalid recovery compartment geometry: no axial room between nose-side start and engine mount."
+            )
+
+        parachute_items = list(parachutes or [])
+        if len(parachute_items) < 2:
+            raise ValueError("Dual recovery requirement violated: expected at least 2 parachutes.")
+
+        default_packed_length = max(0.015, 0.14 * float(design_parameters.get("parachute_diameter", 0.30)))
+        packed_radius_limit = max(0.0005, body_inner_radius - 0.0005)
+        packed_radius_default = min(packed_radius_limit, max(0.003, 0.03 * float(design_parameters.get("parachute_diameter", 0.30))))
+
+        placements: list[dict[str, Any]] = []
+        cursor = recovery_start + 0.003
+        for parachute in parachute_items:
+            packed_length = self._safe_float(self._call_method(parachute, "getPackedLength"), default_packed_length)
+            packed_length = max(0.008, packed_length)
+            packed_radius = self._safe_float(self._call_method(parachute, "getPackedRadius"), packed_radius_default)
+            packed_radius = min(packed_radius_limit, max(0.001, packed_radius))
+
+            self._call_method(parachute, "setPackedLength", packed_length)
+            self._call_method(parachute, "setPackedRadius", packed_radius)
+            self._call_method(parachute, "setAxialOffset", cursor)
+
+            front = cursor
+            rear = cursor + packed_length
+            placements.append(
+                {
+                    "name": self._component_name(parachute),
+                    "front": front,
+                    "rear": rear,
+                    "length": packed_length,
+                    "packed_radius": packed_radius,
+                    "diameter": self._safe_float(self._call_method(parachute, "getDiameter"), float(design_parameters.get("parachute_diameter", 0.30))),
+                }
+            )
+            cursor = rear + 0.003
+
+        for placement in placements:
+            if placement["front"] < recovery_start or placement["rear"] > recovery_end:
+                raise ValueError(
+                    f"Parachute '{placement['name']}' outside recovery compartment: "
+                    f"[{placement['front']:.4f}, {placement['rear']:.4f}] not inside "
+                    f"[{recovery_start:.4f}, {recovery_end:.4f}]"
+                )
+            if placement["packed_radius"] > body_inner_radius:
+                raise ValueError(
+                    f"Parachute '{placement['name']}' packed radius {placement['packed_radius']:.4f} exceeds body inner radius {body_inner_radius:.4f}"
+                )
+            if placement["rear"] > engine_front and placement["front"] < engine_rear:
+                raise ValueError(
+                    f"Parachute '{placement['name']}' overlaps engine/motor region "
+                    f"[{engine_front:.4f}, {engine_rear:.4f}]"
+                )
+
+        for i in range(len(placements)):
+            for j in range(i + 1, len(placements)):
+                a = placements[i]
+                b = placements[j]
+                if a["rear"] > b["front"] and b["rear"] > a["front"]:
+                    raise ValueError(f"Parachute overlap detected between '{a['name']}' and '{b['name']}'")
+
+        if cursor - 0.003 > recovery_end:
+            raise ValueError(
+                "Recovery system packing exceeds available compartment length: "
+                f"required {(cursor - 0.003 - recovery_start):.4f} m, available {(recovery_end - recovery_start):.4f} m."
+            )
+
+        return {
+            "coordinate_reference": "OpenRocket axial coordinate in parent BodyTube; x=0 at body tube front, +x toward tail",
+            "body_tube": {
+                "length": body_length,
+                "outer_radius": body_outer_radius,
+                "inner_radius": body_inner_radius,
+                "inner_diameter": body_inner_radius * 2.0,
+            },
+            "recovery_compartment": {"start": recovery_start, "end": recovery_end},
+            "engine_motor_bounds": {"front": engine_front, "rear": engine_rear},
+            "parachutes": placements,
+        }
+
+    def _component_name(self, component) -> str:
+        name = self._call_method(component, "getName")
+        if name is not None:
+            return str(name)
+        return self._component_type(component)
+
+    def _component_type(self, component) -> str:
+        try:
+            return str(component.getClass().getSimpleName())
+        except Exception:
+            return component.__class__.__name__
+
+    def _first_child_of_type(self, parent, type_name: str):
+        for child in self._iter_children(parent):
+            if self._component_type(child).lower() == type_name.lower():
+                return child
+        return None
+
+    def _iter_children(self, parent):
+        children = self._call_method(parent, "getChildren")
+        if children is None:
+            return []
+        try:
+            return list(children)
+        except Exception:
+            return []
+
+    def _component_bounds_in_parent(self, component, parent_length: float) -> tuple[float, float]:
+        length = self._safe_float(self._call_method(component, "getLength"), 0.0)
+        offset = self._safe_float(self._call_method(component, "getAxialOffset"), 0.0)
+        method_name = str(self._call_method(component, "getAxialMethod") or "TOP").upper()
+
+        if "BOTTOM" in method_name:
+            rear = parent_length + offset
+            front = rear - length
+            return front, rear
+        if "MIDDLE" in method_name:
+            center = (parent_length / 2.0) + offset
+            return center - (length / 2.0), center + (length / 2.0)
+        front = offset
+        return front, front + length
+
+    def _body_outer_radius(self, body_tube, default_value: float) -> float:
+        value = self._call_method(body_tube, "getOuterRadius")
+        if value is None:
+            value = self._call_method(body_tube, "getRadius")
+        return self._safe_float(value, default_value)
+
+    def _call_method(self, obj, method_name: str, *args):
+        try:
+            method = getattr(obj, method_name, None)
+            if method is None:
+                return None
+            return method(*args)
+        except Exception:
+            return None
+
+    def _safe_float(self, value: Any, default: float) -> float:
+        try:
+            if value is None:
+                return default
+            return float(value)
+        except Exception:
+            return default
+
+    def _log_geometry_report(self, geometry: dict[str, Any]) -> None:
+        logger.info(
+            "Geometry report | body_id=%.4f m | recovery=[%.4f, %.4f] m | engine=[%.4f, %.4f] m | parachutes=%s",
+            geometry["body_tube"]["inner_diameter"],
+            geometry["recovery_compartment"]["start"],
+            geometry["recovery_compartment"]["end"],
+            geometry["engine_motor_bounds"]["front"],
+            geometry["engine_motor_bounds"]["rear"],
+            [
+                {
+                    "name": p["name"],
+                    "front": round(p["front"], 4),
+                    "rear": round(p["rear"], 4),
+                    "packed_radius": round(p["packed_radius"], 4),
+                }
+                for p in geometry["parachutes"]
+            ],
+        )
 
     def simulate_design(self, design_parameters: dict[str, Any], simulation_index: int = 0) -> dict[str, Any]:
         """Load template, apply parameters, run simulation, return comprehensive metrics."""
@@ -269,5 +479,3 @@ class OpenRocketBackend:
         except Exception as e:
             logger.debug(f"Could not extract landing distance: {e}")
             return 0.0
-
-
