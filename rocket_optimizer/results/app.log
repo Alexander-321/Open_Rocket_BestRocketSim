@@ -1,0 +1,29 @@
+2026-08-14 09:36:13,695 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,695 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {'fin_count': 4}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - WARNING - Motor total impulse (12.0 N*s) exceeds maximum competition limit (10 N*s)
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - WARNING - Total launch mass (160.0g) exceeds maximum competition limit (150g)
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: Nonem / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,696 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: Nonem / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,697 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: 140.0m / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,697 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: 140.0m / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,697 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: 140.0m / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,697 - rocket_optimizer - INFO - Successfully parsed simulation results from /tmp/tmp1m1aagl0.csv
+2026-08-14 09:36:13,697 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: Nonem / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,698 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,698 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: Nonem / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,698 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,699 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: Nonem / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,699 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
+2026-08-14 09:36:13,699 - rocket_optimizer - INFO - Evaluated Rocket (Alt: 75.00m, Time: 20.0s, Stab: 1.50cal, Landing Dist: 0.0m, Fitness: 1079.97)
+2026-08-14 09:36:13,700 - rocket_optimizer - INFO - FitnessCalculator initialized (Target Alt: Nonem / 459.0ft, Target Duration: (25.0, 28.0)s, Stability: 1.0-2.0 cal)
+2026-08-14 09:36:13,700 - rocket_optimizer - INFO - Initialized ConstraintHandler with fixed constraints: {}
