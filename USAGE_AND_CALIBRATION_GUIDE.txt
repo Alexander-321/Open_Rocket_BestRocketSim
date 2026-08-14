@@ -1,0 +1,102 @@
+================================================================================
+          🚀 ROCKET OPTIMIZER & GENERATOR - USAGE & CALIBRATION GUIDE 🚀
+================================================================================
+
+This software uses a Genetic Algorithm to automatically design, simulate, and
+optimize high-performance rocket models in OpenRocket (.ork format).
+
+--------------------------------------------------------------------------------
+1. QUICK START - HOW TO RUN
+--------------------------------------------------------------------------------
+
+Make sure you are in the project folder (or add it to your PYTHONPATH):
+   cd /Users/ard/Desktop/untitled_folder/Rocket_SIM
+
+A. INTERACTIVE MENU (RECOMMENDED FOR BEGINNERS)
+   Run the interactive setup menu to easily pick presets and parameters:
+      python3 -m rocket_optimizer.main --interactive
+
+B. SPACE KOSHIEN 2026 PRESETS
+   - C-Motor Target (140 meters / 459 feet):
+      python3 -m rocket_optimizer.main --preset space-koshien-2026-c
+
+   - B-Motor Target (76 meters / 250 feet):
+      python3 -m rocket_optimizer.main --preset space-koshien-2026-b
+
+C. CUSTOM TARGET ALTITUDE
+   To make the rocket target ANY specific altitude (e.g., 120 meters):
+      python3 -m rocket_optimizer.main --target-altitude 120.0
+
+D. MAXIMUM ALTITUDE MODE
+   To optimize for maximum possible altitude without a target limit:
+      python3 -m rocket_optimizer.main --preset max-altitude
+
+E. ADJUSTING POPULATION & GENERATIONS
+   For deeper design searches, increase population and generation counts:
+      python3 -m rocket_optimizer.main --preset space-koshien-2026-c --population 100 --generations 30
+
+--------------------------------------------------------------------------------
+2. HOW TO CALIBRATE FOR DIFFERENT COMPETITIONS & SITUATIONS
+--------------------------------------------------------------------------------
+
+All configuration settings are centralized in:
+   rocket_optimizer/config.py
+
+A. TARGET ALTITUDE CALIBRATION
+   - If a competition targets a specific apogee (e.g. 100m, 140m, 200m):
+     Set TARGET_ALTITUDE in config.py or pass --target-altitude <meters>.
+     The fitness calculator subtracts a penalty equal to |simulated_alt - target_alt|.
+
+B. PHYSICAL & GEOMETRIC LIMITATIONS
+   - Minimum Rocket Length:
+     Space Koshien requires total length >= 300mm (0.3m).
+     Modify MIN_ROCKET_LENGTH in config.py if your competition specifies a different minimum length.
+   - Maximum Rocket Weight:
+     Modify MAX_ROCKET_MASS in config.py (default 0.15 kg / 150g).
+
+C. STABILITY MARGIN CALIBRATION
+   - Ideal stability margin is set to 1.0 to 2.0 calibers by default.
+   - If your competition requires higher stability (e.g. 1.5 to 2.5 calibers):
+     Edit TARGET_STABILITY_MARGIN_CALIBERS = (1.5, 2.5) in config.py.
+
+D. CHANGING VARIABLE SEARCH RANGES
+   If you want to constrain or expand design variables (body length, body diameter,
+   fin chords, sweep, thickness, nose cone length):
+   - Edit _generate_random_rocket_params() in rocket_optimizer/optimizer.py
+   - Example bounds:
+       body_len = random.uniform(0.20, 0.50)   # 20cm to 50cm
+       body_dia = random.uniform(0.024, 0.040) # 24mm to 40mm diameter
+
+E. CHANGING SCORING WEIGHTS
+   In config.py:
+     ALTITUDE_WEIGHT = 1.0  # Weight for altitude target deviation or height
+     STABILITY_WEIGHT = 0.5 # Reward weight for stability within target range
+     DRAG_WEIGHT = 0.1      # Penalty weight for average aerodynamic drag
+
+--------------------------------------------------------------------------------
+3. OUTPUT FILES & RESULTS
+--------------------------------------------------------------------------------
+
+After optimization finishes, all results are saved in:
+   rocket_optimizer/results/
+
+- best_rocket.ork:
+  The final optimized OpenRocket design file. Open this file in OpenRocket GUI to
+  view full 3D diagrams, component specifications, and print manufacturing templates.
+
+- optimization_results.csv:
+  Complete CSV spreadsheet recording every individual rocket generated across
+  all generations with exact dimensions, fitness score, altitude, and stability.
+
+- *.png Plots:
+  Visual graphs showing fitness evolution, altitude distribution, stability
+  distribution, and parameter evolution trends over generations.
+
+--------------------------------------------------------------------------------
+4. TESTING THE CODE
+--------------------------------------------------------------------------------
+
+To verify everything is working properly, run the test suite:
+   python3 -m unittest rocket_optimizer/tests/test_optimizer.py
+
+================================================================================
