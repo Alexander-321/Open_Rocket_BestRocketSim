@@ -1,0 +1,45 @@
+================================================================================
+                    🚀 ROCKET OPTIMIZATION RUN SUMMARY 🚀
+================================================================================
+Date/Time:           2026-08-16 05:55:29
+Preset / Tag:        space-koshien-2026-b
+Optimization Mode:   Target Altitude Matching (76.0 m)
+
+--- CONSTRAINTS ENFORCED ---
+Minimum Total Length: 300.0 mm (0.300 m)
+Maximum Total Mass:   150.0 g (0.150 kg)
+Target Stability:     1.00 - 2.00 calibers
+
+--- BEST ROCKET DESIGN FOUND ---
+Body Length:          255.8 mm
+Body Diameter:        34.5 mm
+Nose Cone Length:     185.6 mm
+Nose Cone Shape:      PARABOLIC
+Fin Count:            3
+Fin Root Chord:       101.8 mm
+Fin Tip Chord:        24.4 mm
+Fin Sweep:            80.1 mm
+Fin Thickness:        1.21 mm
+Fin Height:           26.5 mm
+Fin Axial Position:   36.1%
+Launch Lug Position:  20.2%
+Ballast Mass:         11.9 g
+Parachute Diameter:   182 mm
+Motor:                B6 (Estes)
+
+--- SIMULATION PERFORMANCE METRICS ---
+Simulated Altitude:   75.99 m
+Target Altitude:      76.0 m (Error: 0.01 m)
+Flight Duration:      17.45 s
+Total Launch Mass:    95.7 g
+Stability Margin:     1.62 calibers
+Average Drag Force:   0.266 N
+Fitness Score:        999.95
+
+--- GENERATED OUTPUT FILES ---
+Output Folder:        /home/ubuntu/repos/Open_Rocket_BestRocketSim/rocket_optimizer/results/run_20260816_055447_space-koshien-2026-b
+OpenRocket Model:     best_rocket.ork
+Optimization CSV:     optimization_results.csv
+Run Summary:          run_summary.txt
+Evolution Plots:      fitness_evolution.png, altitude_distribution.png, etc.
+================================================================================

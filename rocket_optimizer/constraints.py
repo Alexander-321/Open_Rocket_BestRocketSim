@@ -1,6 +1,6 @@
 from typing import Dict, Any
 
-from .config import FIXED_CONSTRAINTS
+from .config import FIXED_CONSTRAINTS, MAX_ROCKET_MASS, MAX_TOTAL_IMPULSE
 from .utils import logger
 
 VALID_NOSE_SHAPES = {"CONICAL", "OGIVE", "PARABOLIC"}
@@ -119,21 +119,32 @@ class ConstraintHandler:
 
         return True
 
-    def validate_simulation_constraints(self, sim_results: Dict[str, Any]) -> bool:
-        """Validates simulated rocket mass, total motor impulse, and recovery specs against Space Koshien 2026 rules."""
+    def validate_simulation_constraints(
+        self, sim_results: Dict[str, Any], enforce_mass: bool = True
+    ) -> bool:
+        """Validates simulated rocket mass and total motor impulse against Space Koshien 2026 rules.
+
+        The optimizer calls this with ``enforce_mass=False``: an overweight design
+        is scored with a graded mass penalty instead of being discarded, so the
+        search can walk ballast back under the limit.
+        """
         if not sim_results or not sim_results.get("simulation_successful", False):
             return False
 
-        # Mass limit <= 150g (0.15kg)
         total_mass = sim_results.get("total_mass")
-        if total_mass is not None and total_mass > 0.150:
-            logger.warning(f"Total launch mass ({total_mass*1000:.1f}g) exceeds maximum competition limit (150g)")
+        if enforce_mass and total_mass is not None and total_mass > MAX_ROCKET_MASS:
+            logger.warning(
+                f"Total launch mass ({total_mass*1000:.1f}g) exceeds maximum competition limit "
+                f"({MAX_ROCKET_MASS*1000:.0f}g)"
+            )
             return False
 
-        # Total impulse <= 10 N*s
         total_impulse = sim_results.get("total_impulse")
-        if total_impulse is not None and total_impulse > 10.0:
-            logger.warning(f"Motor total impulse ({total_impulse:.1f} N*s) exceeds maximum competition limit (10 N*s)")
+        if total_impulse is not None and total_impulse > MAX_TOTAL_IMPULSE:
+            logger.warning(
+                f"Motor total impulse ({total_impulse:.1f} N*s) exceeds maximum competition limit "
+                f"({MAX_TOTAL_IMPULSE:.0f} N*s)"
+            )
             return False
 
         return True
