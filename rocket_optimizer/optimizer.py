@@ -11,11 +11,13 @@ from datetime import datetime
 
 from .utils import logger
 from .config import (
-    MUTATION_RATE, CROSSOVER_RATE, ELITISM_COUNT,
+    MUTATION_RATE, MUTATION_GENE_PROBABILITY, CROSSOVER_RATE, ELITISM_COUNT,
     RESULTS_DIR, RESULTS_CSV, BEST_ROCKET_FILE, FIXED_CONSTRAINTS,
     POPULATION_SIZE as DEFAULT_POPULATION_SIZE,
     NUM_GENERATIONS as DEFAULT_NUM_GENERATIONS,
     MIN_ROCKET_LENGTH, MAX_ROCKET_MASS, TARGET_STABILITY_MARGIN_CALIBERS,
+    COMPETITION_PRESETS, DESIGN_BOUNDS, MOTOR_DESIGNATION, MOTOR_MANUFACTURER,
+    MOTOR_EJECTION_DELAY,
     create_run_directory
 )
 from .generator import RocketGenerator
@@ -33,10 +35,17 @@ DESIGN_FIELDS = {
     "fin_tip_chord",
     "fin_sweep",
     "fin_thickness",
+    "fin_height",
     "fin_count",
     "fin_position",
     "launch_lug_position",
+    "ballast_mass",
+    "parachute_diameter",
 }
+
+# Fitness returned for designs that cannot be simulated. Finite so tournament
+# selection and statistics stay well-defined.
+FAILED_FITNESS = -1.0e6
 
 METRIC_FIELDS = {
     "max_altitude",
@@ -61,9 +70,12 @@ class Rocket:
     fin_tip_chord: float = 0.025
     fin_sweep: float = 0.01
     fin_thickness: float = 0.002
+    fin_height: float = 0.03
     fin_count: int = 3
     fin_position: float = 0.5
     launch_lug_position: float = 0.3
+    ballast_mass: float = 0.0
+    parachute_diameter: float = 0.30
     max_altitude: float = 0.0
     flight_time: float = 0.0
     stability: float = 0.0
@@ -116,6 +128,13 @@ class RocketOptimizer:
         self.target_altitude = target_altitude
         self.preset_name = preset_name
 
+        preset = COMPETITION_PRESETS.get(preset_name or "", {})
+        self.motor_designation = preset.get("motor", MOTOR_DESIGNATION)
+        self.motor_manufacturer = preset.get("motor_manufacturer", MOTOR_MANUFACTURER)
+        self.motor_delay = preset.get("motor_delay", MOTOR_EJECTION_DELAY)
+        self.duration_window = preset.get("duration_window")
+        self.max_mass = preset.get("max_rocket_mass", MAX_ROCKET_MASS)
+
         if results_dir is not None:
             self.results_dir = results_dir
             os.makedirs(self.results_dir, exist_ok=True)
@@ -126,11 +145,22 @@ class RocketOptimizer:
         self.best_rocket_file = os.path.join(self.results_dir, "best_rocket.ork")
         self.summary_file = os.path.join(self.results_dir, "run_summary.txt")
 
-        self.backend = OpenRocketBackend(template_path=self.template_path)
+        self.backend = OpenRocketBackend(
+            template_path=self.template_path,
+            motor_designation=self.motor_designation,
+            motor_manufacturer=self.motor_manufacturer,
+            motor_delay=self.motor_delay,
+        )
         self.generator = RocketGenerator(backend=self.backend)
         self.simulator = OpenRocketSimulator(backend=self.backend, results_dir=self.results_dir)
-        self.fitness_calculator = FitnessCalculator(target_altitude=self.target_altitude)
+        self.fitness_calculator = FitnessCalculator(
+            target_altitude=self.target_altitude,
+            motor_class=str(self.motor_designation)[0] if self.motor_designation else "C",
+            duration_window=self.duration_window,
+            max_mass=self.max_mass,
+        )
         self.constraint_handler = ConstraintHandler()
+        self._fitness_cache: Dict[Tuple[Any, ...], Tuple[float, Dict[str, Any]]] = {}
 
         self.toolbox = base.Toolbox()
         self._register_toolbox()
@@ -147,11 +177,13 @@ class RocketOptimizer:
             with open(self.results_csv, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    "Generation", "Individual_ID", "Fitness", "Max_Altitude", "Stability", "Drag",
+                    "Generation", "Individual_ID", "Fitness", "Max_Altitude", "Flight_Time",
+                    "Stability", "Drag", "Total_Mass",
                     "Body_Length", "Body_Diameter",
                     "Nose_Cone_Length", "Nose_Cone_Shape", "Fin_Root_Chord", "Fin_Tip_Chord",
-                    "Fin_Sweep", "Fin_Thickness", "Fin_Count", "Fin_Position",
-                    "Launch_Lug_Position", "Is_Valid", "Simulation_Successful",
+                    "Fin_Sweep", "Fin_Thickness", "Fin_Height", "Fin_Count", "Fin_Position",
+                    "Launch_Lug_Position", "Ballast_Mass", "Parachute_Diameter",
+                    "Is_Valid", "Simulation_Successful",
                 ])
 
     def _log_rocket_to_csv(
@@ -167,10 +199,12 @@ class RocketOptimizer:
             writer.writerow([
                 generation,
                 individual_id,
-                fitness if fitness is not None else float("-inf"),
+                fitness if fitness is not None else FAILED_FITNESS,
                 rocket.max_altitude,
+                rocket.flight_time,
                 rocket.stability,
                 rocket.drag,
+                rocket.total_mass,
                 rocket.body_length,
                 rocket.body_diameter,
                 rocket.nose_cone_length,
@@ -179,39 +213,85 @@ class RocketOptimizer:
                 rocket.fin_tip_chord,
                 rocket.fin_sweep,
                 rocket.fin_thickness,
+                rocket.fin_height,
                 rocket.fin_count,
                 rocket.fin_position,
                 rocket.launch_lug_position,
+                rocket.ballast_mass,
+                rocket.parachute_diameter,
                 rocket.is_valid,
                 rocket.simulation_successful,
             ])
 
 
     def _generate_random_rocket_params(self) -> Dict[str, Any]:
-        body_len = random.uniform(0.20, 0.50)
-        body_dia = random.uniform(0.024, 0.040)
-        root_chord = random.uniform(0.03, min(0.12, body_len * 0.4))
-        tip_chord = random.uniform(0.01, root_chord)
+        body_len = random.uniform(*DESIGN_BOUNDS["body_length"])
+        body_dia = random.uniform(*DESIGN_BOUNDS["body_diameter"])
+        root_chord = random.uniform(
+            DESIGN_BOUNDS["fin_root_chord"][0],
+            min(DESIGN_BOUNDS["fin_root_chord"][1], body_len * 0.4),
+        )
+        tip_chord = random.uniform(DESIGN_BOUNDS["fin_tip_chord"][0], root_chord)
         sweep = random.uniform(0.0, root_chord)
         return {
             "body_length": body_len,
             "body_diameter": body_dia,
-            "nose_cone_length": random.uniform(0.05, 0.20),
+            "nose_cone_length": random.uniform(*DESIGN_BOUNDS["nose_cone_length"]),
             "nose_cone_shape": random.choice(["CONICAL", "OGIVE", "PARABOLIC"]),
             "fin_root_chord": root_chord,
             "fin_tip_chord": tip_chord,
             "fin_sweep": sweep,
-            "fin_thickness": random.uniform(0.001, 0.004),
+            "fin_thickness": random.uniform(*DESIGN_BOUNDS["fin_thickness"]),
+            "fin_height": random.uniform(*DESIGN_BOUNDS["fin_height"]),
             "fin_count": random.choice([3, 4]),
             "fin_position": random.uniform(0.3, 0.7),
             "launch_lug_position": random.uniform(0.2, 0.5),
+            "ballast_mass": random.uniform(*DESIGN_BOUNDS["ballast_mass"]),
+            "parachute_diameter": random.uniform(*DESIGN_BOUNDS["parachute_diameter"]),
         }
 
+    def _repair_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Pull a design back inside its bounds and geometric rules.
+
+        Crossover and mutation routinely push genes out of range; repairing is
+        what keeps the search moving, because a rejected individual carries no
+        gradient information at all.
+        """
+        for key, (low, high) in DESIGN_BOUNDS.items():
+            if key in params and isinstance(params[key], (int, float)):
+                params[key] = min(max(float(params[key]), low), high)
+
+        # Fins must fit the body tube and keep tip <= root, sweep <= root.
+        max_root = max(DESIGN_BOUNDS["fin_root_chord"][0], params["body_length"] * 0.4)
+        params["fin_root_chord"] = min(params["fin_root_chord"], max_root)
+        params["fin_tip_chord"] = min(params["fin_tip_chord"], params["fin_root_chord"])
+        params["fin_sweep"] = min(params["fin_sweep"], params["fin_root_chord"])
+
+        if params.get("fin_count") not in (3, 4):
+            params["fin_count"] = min(4, max(3, int(params.get("fin_count", 3))))
+
+        if str(params.get("nose_cone_shape", "")).upper() not in {"CONICAL", "OGIVE", "PARABOLIC"}:
+            params["nose_cone_shape"] = "OGIVE"
+
+        # Total length must satisfy the competition minimum; grow the nose cone
+        # first, then the body tube.
+        shortfall = MIN_ROCKET_LENGTH - (params["nose_cone_length"] + params["body_length"])
+        if shortfall > 0:
+            nose_headroom = DESIGN_BOUNDS["nose_cone_length"][1] - params["nose_cone_length"]
+            grow_nose = min(shortfall, nose_headroom)
+            params["nose_cone_length"] += grow_nose
+            shortfall -= grow_nose
+            if shortfall > 0:
+                params["body_length"] = min(
+                    DESIGN_BOUNDS["body_length"][1], params["body_length"] + shortfall
+                )
+
+        return self.constraint_handler.apply_fixed_constraints(params)
 
     def _attr_rocket(self) -> Rocket:
         while True:
             raw_params = self._generate_random_rocket_params()
-            final_params = self.constraint_handler.apply_fixed_constraints(raw_params.copy())
+            final_params = self._repair_params(raw_params.copy())
             if self.constraint_handler.validate_design(final_params):
                 rocket = Rocket(**{k: final_params[k] for k in DESIGN_FIELDS})
                 rocket.is_valid = True
@@ -226,27 +306,49 @@ class RocketOptimizer:
 
         self.toolbox.register("evaluate", self._evaluate_rocket)
         self.toolbox.register("mate_rocket", self._crossover_rocket, indpb=0.5)
-        self.toolbox.register("mutate_rocket", self._mutate_rocket, indpb=0.1)
+        self.toolbox.register("mutate_rocket", self._mutate_rocket, indpb=MUTATION_GENE_PROBABILITY)
+
+    def _design_key(self, rocket: Rocket) -> Tuple[Any, ...]:
+        """Cache key over the design genes, rounded to sub-manufacturing precision."""
+        key = []
+        for field_name in sorted(DESIGN_FIELDS):
+            value = getattr(rocket, field_name)
+            key.append(round(value, 5) if isinstance(value, float) else value)
+        return tuple(key)
 
     def _evaluate_rocket(self, individual: creator.Individual) -> Tuple[float]:
         rocket = _get_rocket(individual)
 
         if not rocket.is_valid:
             rocket.simulation_successful = False
-            return (float("-inf"),)
+            return (FAILED_FITNESS,)
+
+        cache_key = self._design_key(rocket)
+        cached = self._fitness_cache.get(cache_key)
+        if cached is not None:
+            fitness, metrics = cached
+            for name, value in metrics.items():
+                setattr(rocket, name, value)
+            return (fitness,)
 
         try:
             simulation_results = self.simulator.run_simulation(rocket.to_dict())
             if simulation_results and simulation_results.get("simulation_successful", False):
-                # Validate competition simulation constraints (mass <= 150g, total impulse <= 10 N*s)
-                if not self.constraint_handler.validate_simulation_constraints(simulation_results):
+                # Validate competition simulation constraints (total impulse <= 10 N*s).
+                # Mass is scored as a graded penalty instead of a hard rejection.
+                if not self.constraint_handler.validate_simulation_constraints(
+                    simulation_results, enforce_mass=False
+                ):
                     rocket.simulation_successful = False
                     return (-10000.0,)
 
                 rocket.max_altitude = simulation_results["max_altitude"]
-                rocket.stability = (
-                    simulation_results["min_stability"] + simulation_results["max_stability"]
-                ) / 2
+                # Stability leaving the launch rod is the meaningful safety
+                # figure; the in-flight minimum dips arbitrarily after burnout.
+                rocket.stability = simulation_results.get(
+                    "stability_off_rod",
+                    (simulation_results["min_stability"] + simulation_results["max_stability"]) / 2,
+                )
                 rocket.drag = simulation_results["average_drag"]
                 rocket.flight_time = simulation_results.get("flight_time", 20.0)
                 rocket.landing_distance = simulation_results.get("landing_distance", 0.0)
@@ -260,11 +362,17 @@ class RocketOptimizer:
                     simulation_successful=True,
                     flight_time=rocket.flight_time,
                     landing_distance=rocket.landing_distance,
+                    total_mass=rocket.total_mass,
                 )
                 logger.info(
                     f"Evaluated Rocket (Alt: {rocket.max_altitude:.2f}m, "
                     f"Time: {rocket.flight_time:.1f}s, Stab: {rocket.stability:.2f}cal, "
+                    f"Mass: {rocket.total_mass * 1000:.1f}g, "
                     f"Landing Dist: {rocket.landing_distance:.1f}m, Fitness: {calculated_fitness:.2f})"
+                )
+                self._fitness_cache[cache_key] = (
+                    calculated_fitness,
+                    {name: getattr(rocket, name) for name in METRIC_FIELDS},
                 )
                 return (calculated_fitness,)
 
@@ -308,8 +416,7 @@ class RocketOptimizer:
                 setattr(rocket2, attr, val1)
 
         for rocket, individual in ((rocket1, ind1), (rocket2, ind2)):
-            params = rocket.to_dict()
-            params = self.constraint_handler.apply_fixed_constraints(params)
+            params = self._repair_params(rocket.to_dict())
             validated = self.constraint_handler.validate_design(params)
             updated = Rocket.from_dict({**params, "is_valid": validated})
             individual[0] = updated
@@ -327,15 +434,18 @@ class RocketOptimizer:
         mutated_params = rocket.to_dict()
 
         mutation_scales = {
-            "body_length": 0.02,
-            "body_diameter": 0.002,
-            "nose_cone_length": 0.01,
-            "fin_root_chord": 0.005,
-            "fin_tip_chord": 0.005,
-            "fin_sweep": 0.002,
+            "body_length": 0.03,
+            "body_diameter": 0.003,
+            "nose_cone_length": 0.02,
+            "fin_root_chord": 0.008,
+            "fin_tip_chord": 0.008,
+            "fin_sweep": 0.004,
             "fin_thickness": 0.0005,
-            "fin_position": 0.05,
-            "launch_lug_position": 0.05,
+            "fin_height": 0.006,
+            "fin_position": 0.08,
+            "launch_lug_position": 0.08,
+            "ballast_mass": 0.008,
+            "parachute_diameter": 0.05,
         }
 
 
@@ -356,7 +466,7 @@ class RocketOptimizer:
                 if choices:
                     mutated_params[attr] = random.choice(choices)
 
-        final_params = self.constraint_handler.apply_fixed_constraints(mutated_params)
+        final_params = self._repair_params(mutated_params)
         validated = self.constraint_handler.validate_design(final_params)
         individual[0] = Rocket.from_dict({**final_params, "is_valid": validated})
         del individual.fitness.values
@@ -452,12 +562,18 @@ Fin Root Chord:       {rocket.fin_root_chord * 1000:.1f} mm
 Fin Tip Chord:        {rocket.fin_tip_chord * 1000:.1f} mm
 Fin Sweep:            {rocket.fin_sweep * 1000:.1f} mm
 Fin Thickness:        {rocket.fin_thickness * 1000:.2f} mm
+Fin Height:           {rocket.fin_height * 1000:.1f} mm
 Fin Axial Position:   {rocket.fin_position * 100:.1f}%
 Launch Lug Position:  {rocket.launch_lug_position * 100:.1f}%
+Ballast Mass:         {rocket.ballast_mass * 1000:.1f} g
+Parachute Diameter:   {rocket.parachute_diameter * 1000:.0f} mm
+Motor:                {self.motor_designation} ({self.motor_manufacturer})
 
 --- SIMULATION PERFORMANCE METRICS ---
 Simulated Altitude:   {rocket.max_altitude:.2f} m
 Target Altitude:      {target_str} (Error: {alt_diff_str})
+Flight Duration:      {rocket.flight_time:.2f} s
+Total Launch Mass:    {rocket.total_mass * 1000:.1f} g
 Stability Margin:     {rocket.stability:.2f} calibers
 Average Drag Force:   {rocket.drag:.3f} N
 Fitness Score:        {self.best_fitness:.2f}
