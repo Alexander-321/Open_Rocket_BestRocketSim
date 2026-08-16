@@ -106,11 +106,14 @@ ALTITUDE_WEIGHT = 1.0
 STABILITY_WEIGHT = 0.5
 DRAG_WEIGHT = 0.1
 
-# Competition scoring weights (penalty points; lower penalty = higher fitness)
+# Competition scoring weights (penalty points; lower penalty = higher fitness).
+# The duration and stability weights are set high enough that a small window
+# violation always costs more than the altitude accuracy it buys, so the search
+# treats those windows as binding rather than trading them away.
 ALTITUDE_PENALTY_POINTS_PER_FT = 1.0
-DURATION_PENALTY_POINTS_PER_SECOND = 4.0
+DURATION_PENALTY_POINTS_PER_SECOND = 40.0
 STABILITY_PENALTY_POINTS_PER_CAL_UNDER = 100.0
-STABILITY_PENALTY_POINTS_PER_CAL_OVER = 20.0
+STABILITY_PENALTY_POINTS_PER_CAL_OVER = 100.0
 MASS_PENALTY_POINTS_PER_GRAM_OVER = 20.0
 LANDING_BONUS_POINTS = 5.0
 LANDING_BONUS_RADIUS_M = 5.0
@@ -159,8 +162,13 @@ def create_run_directory(preset_name=None, target_altitude=None, run_name=None):
     else:
         tag = "max_altitude"
 
-    folder_name = f"run_{timestamp}_{tag}"
-    run_dir = os.path.join(RESULTS_DIR, folder_name)
-    os.makedirs(run_dir, exist_ok=True)
+    # Two runs started in the same second must not share a directory, or they
+    # concatenate their CSVs and overwrite each other's best_rocket.ork.
+    run_dir = os.path.join(RESULTS_DIR, f"run_{timestamp}_{tag}")
+    suffix = 2
+    while os.path.exists(run_dir):
+        run_dir = os.path.join(RESULTS_DIR, f"run_{timestamp}_{tag}_{suffix}")
+        suffix += 1
+    os.makedirs(run_dir)
     return run_dir
 

@@ -226,8 +226,9 @@ class OpenRocketBackend:
         # Ensure Payload Mass Components (Quail Egg 10g + Altimeter 8g) exist in upper section
         try:
             mass_comps = self.helper.get_components_of_type(rocket, "MassComponent")
-            egg_exists = any("egg" in m.getName().lower() for m in mass_comps)
-            alt_exists = any("altimeter" in m.getName().lower() for m in mass_comps)
+            names = [str(m.getName()).lower() for m in mass_comps]
+            egg_exists = any("egg" in name for name in names)
+            alt_exists = any("altimeter" in name for name in names)
             
             if not egg_exists and body_tubes:
                 mass_cls = self._instance.openrocket.rocketcomponent.MassComponent
@@ -243,7 +244,7 @@ class OpenRocketBackend:
                 alt.setComponentMass(0.008)
                 body_tubes[0].addChild(alt)
         except Exception as e:
-            logger.debug(f"Note on payload mass component addition: {e}")
+            logger.warning(f"Could not add payload mass components (egg/altimeter): {e}")
 
     def _layout_and_validate_recovery_geometry(
         self,
